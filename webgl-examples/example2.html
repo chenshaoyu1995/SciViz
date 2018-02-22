@@ -1,0 +1,176 @@
+<html>
+
+<!-- Helper scripts -->
+<script type="text/javascript">
+// Signals an error to the user
+function postError(msg) {
+  alert(msg);
+  document.getElementById("error").innerHTML = msg;
+}
+</script>
+
+
+<!-- Main WebGL functions -->
+<script type="text/javascript">
+
+// OBS:  "#version 300 es" has to be the first token in the source, so
+//
+// var vertexSource = `
+// #version 300 es
+// 
+// would not work as there is a \n after `
+// 
+var vertexSource = `#version 300 es
+
+  // Specify the vertex positions hard-coded
+  vec2 positions[3] = vec2[](
+    vec2( 0.0,   0.5),
+    vec2( 0.5, -0.25),
+    vec2(-0.5, -0.25)
+  );
+
+  void main() {
+    // gl_Position is a library-defined variable that needs to be set by the vertex shader
+    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+  }
+`;
+
+
+
+var fragmentSource = `#version 300 es
+
+  // Define the output variable as a low precision vec4
+  out lowp vec4 out_color;
+
+  void main() {
+    // Every fragment shall be completely white
+    out_color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+`;
+
+
+
+function loadShader(gl, type, source) {
+  // Create a shader of the specified type (Vertex or Fragment in this case)
+  var shader = gl.createShader(type);
+
+  // Set the source code of the shader
+  gl.shaderSource(shader, source);
+
+  // Compile the shader code
+  gl.compileShader(shader);
+
+  // Check for compile errors
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    postError("Failed to compile shader with error: " + gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  else {
+    return shader;
+  }
+}
+
+
+
+// Function that renders the scene to screen
+function render(gl, program) {
+  //
+  //   Initial setup
+  //
+
+  // Set the clear color to black with full opaqueness
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+  // Clear the color
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+
+
+  //
+  //   Rendering setup
+  //
+
+  // We use the program that was created above
+  gl.useProgram(program);
+
+  var drawTriangle = function(translation) {
+    // We want to draw a triangle with 3 vertices
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+
+
+
+  //
+  //   Rendering
+  //
+
+  drawTriangle();
+}
+
+
+
+// Main function to be executed after the page has been loaded
+function main() {
+  // Get the canvas object from the main document
+  var canvas = document.querySelector("#glCanvas");
+
+  // Get a WebGL 2.0 context from the canvas
+  var gl = canvas.getContext("webgl2");
+
+  // WebGL 2 is not supported on many browsers yet
+  if (!gl) {
+    postError("Error initializing WebGL2 context");
+    return;
+  }
+
+
+
+  //
+  //   Initialize the shader program
+  //
+  
+  // Create the vertex and fragment shader objects
+  var vertexShader = loadShader(gl, gl.VERTEX_SHADER, vertexSource);
+  var fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+
+  // If either of the shaders failed to compile, we bail out
+  if (!vertexShader || !fragmentShader) {
+    return;
+  }
+
+  // Create the ProgramObject
+  var program = gl.createProgram();
+  // Attach the vertex and fragment shaders to the program object
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  // Link the Program Object
+  gl.linkProgram(program);
+
+  // Check for linking errors
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    postError('Failed to initialize shader program with error: ' + gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return;
+  }
+
+
+
+  //
+  //   Rendering
+  //
+
+  render(gl, program);
+}
+
+</script>
+
+
+
+<body onload="main();">
+  <p>This example introduces shaders with hardcoded vertex positions to render a white triangle.</p>
+  <p id="error"></p>
+  <canvas id="glCanvas" width="640" height="480"></canvas>
+</body>
+
+</html>

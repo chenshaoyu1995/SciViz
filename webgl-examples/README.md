@@ -1,0 +1,3 @@
+This repository contains example files for WebGL development in the SciVis course given at NYU's Center for Data Science.  They require a *WebGL 2.0* compliant browser (see [Can I use... Support tables for HTML5, CSS3, etc](https://caniuse.com/#feat=webgl2)).  The tutorials are loosly based on [Creating 3D objects using WebGL - Web APIs | MDN](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Creating_3D_objects_using_WebGL) and [WebGL2 Fundamentals](https://webgl2fundamentals.org).
+
+The easiest way to start the examples locally is to have Python3 installed and execute `python -m http.server` and visit `localhost:8000` in your browser

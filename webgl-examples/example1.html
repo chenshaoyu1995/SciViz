@@ -1,0 +1,61 @@
+<html>
+
+<!-- Helper scripts -->
+<script type="text/javascript">
+// Signals an error to the user
+function postError(msg) {
+  alert(msg);
+  document.getElementById("error").innerHTML = msg;
+}
+</script>
+
+
+<!-- Main WebGL functions -->
+<script type="text/javascript">
+
+// Function that renders the scene to screen
+function render(gl) {
+  //
+  //   Initial setup
+  //
+
+  // Set the clear color to black with full opaqueness
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+  // Clear the color
+  gl.clear(gl.COLOR_BUFFER_BIT);
+}
+
+// Main function to be executed after the page has been loaded
+function main() {
+  // Get the canvas object from the main document
+  var canvas = document.querySelector("#glCanvas");
+
+  // Get a WebGL 2.0 context from the canvas
+  var gl = canvas.getContext("webgl2");
+
+  // WebGL 2 is not supported on many browsers yet
+  if (!gl) {
+    postError("Error initializing WebGL2 context");
+    return;
+  }
+
+
+
+  //
+  //   Rendering
+  //
+  render(gl);
+}
+
+</script>
+
+
+
+<body onload="main();">
+  <p>This is a minimal example showing how to create a WebGL2 context from a canvas and manipulate it</p>
+  <p id="error"></p>
+  <canvas id="glCanvas" width="640" height="480"></canvas>
+</body>
+
+</html>
