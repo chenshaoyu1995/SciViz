@@ -30,6 +30,9 @@ function rotate() {
   return document.getElementById("rotationSpeed").value
 }
 
+function getV(id){
+  return document.getElementById(id).value
+}
 </script>
 
 <!-- Adding Brandon Jones and Colin MacKenzie IV's gl-matrix library that provides easy
@@ -55,11 +58,13 @@ var vertexSource = `#version 300 es
   in vec3 in_normal;
   in vec2 in_textureCoord;
 
+
   // Specifies the varying variable that stores the position of the vertex.  The value of
   // this variable will be interpolated in the fragment shader
   out vec2 textureCoord;
   out vec3 transformedNormal;
   out vec4 vPosition;
+
   // The model matrix specifies the transformation for the current 'object'
   uniform mat4 modelMatrix;
   // The view matrix specifies information about the location of the virtual camera
@@ -77,6 +82,7 @@ var vertexSource = `#version 300 es
     // Just passing the value along for the fragment shader to interpolate the value between
     // the vertices
     textureCoord = in_textureCoord;
+
     transformedNormal = normalMatrix * in_normal;
   }
 `;
@@ -89,11 +95,16 @@ var fragmentSource = `#version 300 es
   in lowp vec2 textureCoord;
   in lowp vec3 transformedNormal;
   in lowp vec4 vPosition;
+
   // Define the output variable as a low precision vec4
   out lowp vec4 out_color;
 
   uniform sampler2D tex;
-
+  uniform lowp vec3 lightColor;
+  uniform lowp float SpecularExponent;
+  uniform lowp float ka;
+  uniform lowp float kd;
+  uniform lowp float ks;
 
   void main() {
     lowp vec3 V = -normalize(vPosition.xyz);
@@ -102,7 +113,7 @@ var fragmentSource = `#version 300 es
     lowp vec3 N = normalize(transformedNormal);
 
     //vec3 color = vDiffuse * dot(N, L) + vSpecular * pow(dot(H, N), vSpecularExponent);
-    lowp vec3 color = texture(tex, textureCoord).rgb * dot(N, L) + vec3(1.0,1.0,1.0) * pow(dot(H, N), 10.0);
+    lowp vec3 color = ka * texture(tex, textureCoord).rgb + kd * lightColor * texture(tex, textureCoord).rgb * dot(N, L) + ks * lightColor * pow(dot(H, N), SpecularExponent);
     out_color = vec4(color, 1.0);
 
     //out_color = vec4(texture(tex, textureCoord).rgb, 1.0);
@@ -279,6 +290,16 @@ function render(gl, program, uniformLocations, textures, parameters) {
   gl.bindTexture(gl.TEXTURE_2D, textures[0]);
   gl.uniform1i(uniformLocations.texture, 0);
 
+
+  var lightColor = vec3.fromValues(getV("Red"),getV("Green"),getV("Blue"));
+  gl.uniform3fv(uniformLocations.lightColorPos,lightColor);
+
+  gl.uniform1f(uniformLocations.SpecularExponentPos,getV("se"));
+
+  gl.uniform1f(gl.getUniformLocation(program,"ka"),getV("ka"));
+  gl.uniform1f(gl.getUniformLocation(program,"kd"),getV("kd"));
+  gl.uniform1f(gl.getUniformLocation(program,"ks"),getV("ks"));
+
   // This function actually draws the triangles with the provided model matrix
   var drawTriangle = function(modelMatrix) {
     // Set the model matrix uniform
@@ -377,7 +398,8 @@ function main(arg1) {
   var projectionMatrixUniformLocation = gl.getUniformLocation(program, "projectionMatrix");
   var normalMatrixUniformLocation = gl.getUniformLocation(program, "normalMatrix");
   var textureUniformLocation = gl.getUniformLocation(program, "tex");
-
+  var lightColorPos = gl.getUniformLocation(program,"lightColor");
+  var SpecularExponentPos = gl.getUniformLocation(program,"SpecularExponent");
 
   //
   //   Loading assets
@@ -400,6 +422,9 @@ function main(arg1) {
   // If doRotate is selected, this stores the full rotation value
   var fullRotation = 0;
   function internalRender(now) {
+    // document.getElementById("showRed").innerHTML = getV("Red").toString()
+    // document.getElementById("showGreen").innerHTML = getV("Green").toString()
+    // document.getElementById("showBlue").innerHTML = getV("Blue").toString()
     // Moving from ms to seconds
     now *= 0.001;
 
@@ -420,7 +445,9 @@ function main(arg1) {
         viewMatrix: viewMatrixUniformLocation,
         projectionMatrix: projectionMatrixUniformLocation,
         texture: textureUniformLocation,
-        normalMatrix: normalMatrixUniformLocation
+        normalMatrix: normalMatrixUniformLocation,
+        lightColorPos:lightColorPos,
+        SpecularExponentPos:SpecularExponentPos
       },
       [
         texture
@@ -456,6 +483,21 @@ window.onload = function(){
   <p id="fps"></p>
   <input type="checkbox" id="doRotate">Rotation
   <input type="range" min="0" max="10" value="0" class="slider" id="rotationSpeed">
+  <p></p>
+  Red<input type="range" min="0.0" max="1.0" value="1" step="0.01" class="slider" id="Red" oninput="showRed.value = Red.value"><output id="showRed"></output>
+  <p></p>
+  Green<input type="range" min="0.0" max="1.0" value="1" step="0.01" class="slider" id="Green" oninput="showGreen.value = Green.value"><output id="showGreen"></output>
+  <p></p>
+  Blue<input type="range" min="0.0" max="1.0" value="1" step="0.01" class="slider" id="Blue" oninput="showBlue.value = Blue.value"><output id="showBlue"></output>
+  <p></p>
+  ka<input type="range" min="0" max="1" value="0" step ="0.01" class="slider" id="ka" oninput="showka.value = ka.value"><output id="showka"></output>
+  <p></p>
+  kd<input type="range" min="0" max="1" value="0.6" step ="0.01" class="slider" id="kd" oninput="showkd.value = kd.value"><output id="showkd"></output>
+  <p></p>
+  ks<input type="range" min="0" max="1" value="1.0" step ="0.01" class="slider" id="ks" oninput="showks.value = ks.value"><output id="showks"></output>
+  <p></p>
+  specularExp<input type="range" min="0" max="20" value="10" step ="1" class="slider" id="se" oninput="showse.value = se.value"><output id="showse"></output>
+
 </body>
 
 </html>
