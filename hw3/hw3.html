@@ -1,0 +1,438 @@
+<html>
+<script type='text/javascript' src='webgl-obj-loader.min.js'></script>
+<!-- Helper scripts -->
+<script type="text/javascript">
+
+var app={};
+
+
+// Signals an error to the user
+function postError(msg) {
+  alert(msg);
+  document.getElementById("error").innerHTML = msg;
+}
+
+// Posts information about the frametime to the DOM
+function postFrametime(frametime) {
+  document.getElementById("frametime").innerHTML = "Frametime: " + frametime + " ms";
+  document.getElementById("fps").innerHTML = "FPS: " + 1.0 / frametime;
+}
+
+// Returns a boolean whether the triangle should rotate
+function doRotate() {
+  var checkbox = document.getElementById("doRotate").checked;
+  var slider = document.getElementById("rotationSpeed").value != 0.0;
+  return checkbox && slider;
+}
+
+// Returns the rotatation speed at which the triangle should rotate
+function rotate() {
+  return document.getElementById("rotationSpeed").value
+}
+
+</script>
+
+<!-- Adding Brandon Jones and Colin MacKenzie IV's gl-matrix library that provides easy
+to use vector and matrix maths operations.  Source: https://github.com/toji/gl-matrix
+-->
+<script type="text/javascript" src="gl-matrix.js"></script>
+
+
+<!-- Main WebGL functions -->
+<script type="text/javascript">
+
+// OBS:  "#version 300 es" has to be the first token in the source, so
+//
+// var vertexSource = `
+// #version 300 es
+// 
+// would not work as there is a \n after `
+// 
+var vertexSource = `#version 300 es
+
+  // These variables will be set for each vertex that this shader program is executed on
+  in vec3 in_position;
+  in vec3 in_normal;
+  in vec2 in_textureCoord;
+
+  // Specifies the varying variable that stores the position of the vertex.  The value of
+  // this variable will be interpolated in the fragment shader
+  out vec2 textureCoord;
+
+  // The model matrix specifies the transformation for the current 'object'
+  uniform mat4 modelMatrix;
+  // The view matrix specifies information about the location of the virtual camera
+  uniform mat4 viewMatrix;
+  // The projection matrix determines the projection and its parameters, such as field of view
+  uniform mat4 projectionMatrix;
+
+  void main() {
+    // gl_Position is a library-defined variable that needs to be set by the vertex shader
+    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(in_position, 1.0);
+
+    // Just passing the value along for the fragment shader to interpolate the value between
+    // the vertices
+    textureCoord = in_textureCoord;
+  }
+`;
+
+
+
+var fragmentSource = `#version 300 es
+
+  // Incoming varying variable from the vertex shader
+  in lowp vec2 textureCoord;
+
+  // Define the output variable as a low precision vec4
+  out lowp vec4 out_color;
+
+  uniform sampler2D tex;
+
+
+  void main() {
+    // Using the position as the red and green components of the color
+    out_color = texture(tex, textureCoord).rgba;
+  }
+`;
+
+
+
+function loadShader(gl, type, source) {
+  // Create a shader of the specified type (Vertex or Fragment in this case)
+  var shader = gl.createShader(type);
+
+  // Set the source code of the shader
+  gl.shaderSource(shader, source);
+
+  // Compile the shader code
+  gl.compileShader(shader);
+
+  // Check for compile errors
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    postError("Failed to compile shader with error: " + gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  else {
+    return shader;
+  }
+}
+
+
+
+function loadTexture(gl, url) {
+  // Create an OpenGL texture object
+  var texture = gl.createTexture();
+
+  // Bind the texture as the current 2D texture object to be modified
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  // Impostor until the download has finished
+  const level = 0;
+  const internalFormat = gl.RGB;    // 
+  const width = 1;                  // Initial values for the impostor
+  const height = 1;
+  const border = 0;
+  const srcFormat = gl.RGB;
+  const srcType = gl.UNSIGNED_BYTE;
+  const pixel = new Uint8Array([0, 0, 255]);
+
+  // Uploading data to a texture object
+  gl.texImage2D(
+    gl.TEXTURE_2D,              // texture binding that we want to modify
+    0,                          // The level-of-detail level
+    gl.RGB,                     // Creating a texture without alpha channel
+    1,                          // Values for the impostor ;  width of the image
+    1,                          // Values for the impostor ;  height of the image
+    0,                          // Values for the impostor ;  thickness of the border
+    gl.RGB,                     // Usage format, most of the times the same as previous format
+    gl.UNSIGNED_BYTE,           // Data type stored in the texture
+    new Uint8Array([0, 0, 255]) // Data
+  );
+
+  // Specify the filtering for the texture to be bilinear
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+  // Now scheduling the real image to be loaded
+  var image = new Image();
+
+  // When image finishes downloading, execute this function
+  image.onload = function() {
+    // Bind the texture as the current 2D texture object to be modfied
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    // Set the contents of the image as the values of the texture object
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+  };
+  // Initiate the download
+  image.src = url;
+
+  // The buffer id of the texture object will not change even if its contents do, so it is
+  // safe to return the texture identifier here and just continue while the download finishes
+  // in the background
+  return texture;
+}
+
+
+// Function that renders the scene to screen
+function render(gl, program, uniformLocations, textures, parameters) {
+  //
+  //   Initial setup
+  //
+
+  // Set the clear color to black with full opaqueness
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+  // Clear the color
+  gl.clear(gl.COLOR_BUFFER_BIT  | gl.DEPTH_BUFFER_BIT);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+
+
+  //
+  //   Rendering setup
+  //
+
+  // We use the program that was created above
+  gl.useProgram(program);
+
+  //
+  // Buffers
+  var positionAttributeLocation = gl.getAttribLocation(program, "in_position");
+  // Bind the vertex buffer
+  gl.bindBuffer(gl.ARRAY_BUFFER, app.model.vertexBuffer);
+  // Specifying the layout of the data in the buffer
+  gl.vertexAttribPointer(
+    positionAttributeLocation,
+    app.model.vertexBuffer.itemSize,                 // Number of Components
+    gl.FLOAT,                                   // Type of data in the buffer
+    false,                                      // whether components should be normalized
+    0,                                          // stride between objects
+    0                                           // offset to value
+  );
+  // Every vertex attribute array that we are using has to be enabled before it can be used
+  gl.enableVertexAttribArray(positionAttributeLocation);
+
+  var textureCoordinateAttributeLocation = gl.getAttribLocation(program, "in_textureCoord");
+  gl.bindBuffer(gl.ARRAY_BUFFER, app.model.textureBuffer);
+  // Specifying the layout of the data in the buffer
+  gl.vertexAttribPointer(
+    textureCoordinateAttributeLocation,
+    app.model.textureBuffer.itemSize,                // Number of Components
+    gl.FLOAT,                                   // Type of data in the buffer
+    false,                                      // whether components should be normalized
+    0,                                          // stride between objects
+    0                                           // offset to value
+  );
+  // Every vertex attribute array that we are using has to be enabled before it can be used
+  gl.enableVertexAttribArray(textureCoordinateAttributeLocation);
+
+  var normalAttributeLocation = gl.getAttribLocation(program, "in_normal");
+  gl.bindBuffer(gl.ARRAY_BUFFER, app.model.normalBuffer);
+  gl.vertexAttribPointer(normalAttributeLocation, app.model.normalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, app.model.indexBuffer);
+
+  //
+  // Matrices
+
+  // The view and projection matrices are the same for all objects
+  // Create the view matrix
+  var viewMatrix = mat4.create();
+  // Moving the camera 4 units away from the focus
+  mat4.translate(viewMatrix, viewMatrix, [0.0, 0.0, -22.5]);
+  gl.uniformMatrix4fv(uniformLocations.viewMatrix, false, viewMatrix);
+
+  // Create the projection matrix
+  var projectionMatrix = mat4.create();
+  {
+    var fieldOfView = 45 * 2.0 * Math.PI / 360.0;   // 45 degrees in radians
+    var aspectRatio = gl.canvas.clientWidth / gl.canvas.clientHeight; // assuming > 1.0
+    var zNear = 0.1;  // Near clipping plane
+    var zFar = 100.0; // Far clipping plane
+
+    mat4.perspective(projectionMatrix, fieldOfView, aspectRatio, zNear, zFar);
+  }
+  gl.uniformMatrix4fv(uniformLocations.projectionMatrix, false, projectionMatrix);
+
+
+  //
+  // Textures
+  
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+  gl.uniform1i(uniformLocations.texture, 0);
+
+  // This function actually draws the triangles with the provided model matrix
+  var drawTriangle = function(modelMatrix) {
+    // Set the model matrix uniform
+    gl.uniformMatrix4fv(uniformLocations.modelMatrix, false, modelMatrix);
+
+    // We want to draw 4 triangles with 3 vertices each
+    gl.drawElements(
+      gl.TRIANGLES,
+      app.model.indexBuffer.numItems,
+      gl.UNSIGNED_SHORT,   // storage type of the element array buffer
+      0                   // offset into the buffer
+    );
+  };
+
+
+
+  //
+  //   Rendering
+  //
+
+  // Create the model matrix
+  var modelMatrix = mat4.create();
+
+  mat4.rotate(modelMatrix, modelMatrix, parameters.rotation, [0, 0, 1]);
+  mat4.rotate(modelMatrix, modelMatrix, 0.43 * parameters.rotation, [0, 1, 0]);
+  mat4.rotate(modelMatrix, modelMatrix, 0.31 * parameters.rotation, [1, 0, 0]);
+
+  // Draw the triangle
+  drawTriangle(modelMatrix);
+}
+
+
+// Main function to be executed after the page has been loaded
+function main(arg1) {
+  // Get the canvas object from the main document
+  var canvas = document.querySelector("#glCanvas");
+
+  // Get a WebGL 2.0 context from the canvas
+  var gl = canvas.getContext("webgl2");
+
+  // WebGL 2 is not supported on many browsers yet
+  if (!gl) {
+    postError("Error initializing WebGL2 context");
+    return;
+  }
+
+
+
+  //
+  //   Initialize the shader program
+  //
+
+  // Create the vertex and fragment shader objects
+  var vertexShader = loadShader(gl, gl.VERTEX_SHADER, vertexSource);
+  var fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+
+  // If either of the shaders failed to compile, we bail out
+  if (!vertexShader || !fragmentShader) {
+    return;
+  }
+
+  // Create the ProgramObject
+  var program = gl.createProgram();
+  // Attach the vertex and fragment shaders to the program object
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  // Link the Program Object
+  gl.linkProgram(program);
+
+  // Check for linking errors
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    postError('Failed to initialize shader program with error: ' + gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return;
+  }
+
+
+  app=arg1;
+  console.log(app);
+  OBJ.initMeshBuffers(gl, app.model);
+
+
+  //
+  //   Uniform locations
+  //
+
+  // Getting the location of the uniforms of the shader program
+  var modelMatrixUniformLocation = gl.getUniformLocation(program, "modelMatrix");
+  var viewMatrixUniformLocation = gl.getUniformLocation(program, "viewMatrix");
+  var projectionMatrixUniformLocation = gl.getUniformLocation(program, "projectionMatrix");
+  var textureUniformLocation = gl.getUniformLocation(program, "tex");
+
+
+  //
+  //   Loading assets
+  //
+
+  // Loading the texture
+  var texture = loadTexture(gl, "ds_ga_3001_017_opengl_texture.jpg");
+
+
+
+
+
+  //
+  //   Rendering
+  //
+
+  // Used to compute the delta time (dt) between frames
+  var then = 0;
+
+  // If doRotate is selected, this stores the full rotation value
+  var fullRotation = 0;
+  function internalRender(now) {
+    // Moving from ms to seconds
+    now *= 0.001;
+
+    // How much time has passed since the last update?
+    var dt = now - then;
+    then = now;
+
+    // If we rotate, we add the current time to the full rotation
+    if (doRotate()) {
+      fullRotation += dt * rotate();
+    }
+
+    render(
+      gl,
+      program,
+      {
+        modelMatrix: modelMatrixUniformLocation,
+        viewMatrix: viewMatrixUniformLocation,
+        projectionMatrix: projectionMatrixUniformLocation,
+        texture: textureUniformLocation
+      },
+      [
+        texture
+      ],
+      { rotation: fullRotation }
+    );
+
+    postFrametime(dt);
+
+    // By requesting the next animation frame, we are effectively looping inside internalRender
+    requestAnimationFrame(internalRender);
+  }
+
+  // Request the first frame, thus starting the render loop
+  requestAnimationFrame(internalRender);
+}
+
+window.onload = function(){
+  OBJ.downloadMeshes({
+    'model': 'ds_ga_3001_017_opengl_model.obj', // located in the models folder on the server
+  }, main);
+}
+
+</script>
+
+
+
+<body>
+  <p>Optimizing the buffer storage with element array buffers and adding textures</p>
+  <p id="error"></p>
+  <canvas id="glCanvas" width="640" height="480"></canvas>
+  <p id="frametime"></p>
+  <p id="fps"></p>
+  <input type="checkbox" id="doRotate">Rotation
+  <input type="range" min="0" max="10" value="0" class="slider" id="rotationSpeed">
+</body>
+
+</html>

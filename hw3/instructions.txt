@@ -1,0 +1,20 @@
+Instructions
+
+Using the example pages presented in the lecture (https://github.com/alexanderbock/webgl-examples), as inspiration, modify the examples to performs the following tasks:
+
+1. Load a Wavefront OBJ file (https://www.wikiwand.com/en/Wavefront_.obj_file) into vertex buffer arrays
+   a. One option for a library to use for OBJ files is https://github.com/frenchtoast747/webgl-obj-loader but you are free to use any library
+   b. You can use any freely OBJ model that is available, under the following conditions
+      i. The model must be either submitted with the final result or available at a publicly visible URL for the grading
+      ii. The model must contain texture coordinates and vertex normals
+      iii. Apply any texture to the model (the texture must be either submitted with the final result or available at a publicly visible URL for the grading)
+      iv. The model does *not* need to use other material properties
+2. After the model has been loaded, implement Blinn-Phong shading in the fragment shader by making use of the normals and a static light direction. For this task, assume an infinitely distance light source, so that a single direction can be used for all fragments.
+    a. Make it possible for the user to change the color of the light using three sliders for the red, green, and blue contribution.
+    b. Add sliders to modify the ambient light, diffuse light, and specular highlight parameters
+
+ 
+
+If you don't find suitable models on the web you can also use this example:
+http://alexanderbock.eu/lectures/2018/ds_ga_3001_017_opengl_model.obj
+http://alexanderbock.eu/lectures/2018/ds_ga_3001_017_opengl_texture.jpg
