@@ -58,7 +58,8 @@ var vertexSource = `#version 300 es
   // Specifies the varying variable that stores the position of the vertex.  The value of
   // this variable will be interpolated in the fragment shader
   out vec2 textureCoord;
-
+  out vec3 transformedNormal;
+  out vec4 vPosition;
   // The model matrix specifies the transformation for the current 'object'
   uniform mat4 modelMatrix;
   // The view matrix specifies information about the location of the virtual camera
@@ -66,13 +67,17 @@ var vertexSource = `#version 300 es
   // The projection matrix determines the projection and its parameters, such as field of view
   uniform mat4 projectionMatrix;
 
+  uniform mat3 normalMatrix;
+
   void main() {
     // gl_Position is a library-defined variable that needs to be set by the vertex shader
-    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(in_position, 1.0);
+    vPosition = viewMatrix * modelMatrix * vec4(in_position, 1.0);
+    gl_Position = projectionMatrix * vPosition;
 
     // Just passing the value along for the fragment shader to interpolate the value between
     // the vertices
     textureCoord = in_textureCoord;
+    transformedNormal = normalMatrix * in_normal;
   }
 `;
 
@@ -82,7 +87,8 @@ var fragmentSource = `#version 300 es
 
   // Incoming varying variable from the vertex shader
   in lowp vec2 textureCoord;
-
+  in lowp vec3 transformedNormal;
+  in lowp vec4 vPosition;
   // Define the output variable as a low precision vec4
   out lowp vec4 out_color;
 
@@ -90,8 +96,16 @@ var fragmentSource = `#version 300 es
 
 
   void main() {
-    // Using the position as the red and green components of the color
-    out_color = texture(tex, textureCoord).rgba;
+    lowp vec3 V = -normalize(vPosition.xyz);
+    lowp vec3 L = normalize(vec3(1.0, 1.0, 1.0));
+    lowp vec3 H = normalize(L + V);
+    lowp vec3 N = normalize(transformedNormal);
+
+    //vec3 color = vDiffuse * dot(N, L) + vSpecular * pow(dot(H, N), vSpecularExponent);
+    lowp vec3 color = texture(tex, textureCoord).rgb * dot(N, L) + vec3(1.0,1.0,1.0) * pow(dot(H, N), 10.0);
+    out_color = vec4(color, 1.0);
+
+    //out_color = vec4(texture(tex, textureCoord).rgb, 1.0);
   }
 `;
 
@@ -231,6 +245,7 @@ function render(gl, program, uniformLocations, textures, parameters) {
   var normalAttributeLocation = gl.getAttribLocation(program, "in_normal");
   gl.bindBuffer(gl.ARRAY_BUFFER, app.model.normalBuffer);
   gl.vertexAttribPointer(normalAttributeLocation, app.model.normalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(normalAttributeLocation);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, app.model.indexBuffer);
 
@@ -269,6 +284,12 @@ function render(gl, program, uniformLocations, textures, parameters) {
     // Set the model matrix uniform
     gl.uniformMatrix4fv(uniformLocations.modelMatrix, false, modelMatrix);
 
+    var normalMatrix = mat3.create();
+    var mvM = mat4.create();
+    mat4.mul(mvM,modelMatrix,viewMatrix)
+    mat3.normalFromMat4(normalMatrix, mvM);
+    
+    gl.uniformMatrix3fv(uniformLocations.normalMatrix, false, normalMatrix);
     // We want to draw 4 triangles with 3 vertices each
     gl.drawElements(
       gl.TRIANGLES,
@@ -354,6 +375,7 @@ function main(arg1) {
   var modelMatrixUniformLocation = gl.getUniformLocation(program, "modelMatrix");
   var viewMatrixUniformLocation = gl.getUniformLocation(program, "viewMatrix");
   var projectionMatrixUniformLocation = gl.getUniformLocation(program, "projectionMatrix");
+  var normalMatrixUniformLocation = gl.getUniformLocation(program, "normalMatrix");
   var textureUniformLocation = gl.getUniformLocation(program, "tex");
 
 
@@ -397,7 +419,8 @@ function main(arg1) {
         modelMatrix: modelMatrixUniformLocation,
         viewMatrix: viewMatrixUniformLocation,
         projectionMatrix: projectionMatrixUniformLocation,
-        texture: textureUniformLocation
+        texture: textureUniformLocation,
+        normalMatrix: normalMatrixUniformLocation
       },
       [
         texture
